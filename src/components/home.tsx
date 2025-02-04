@@ -65,7 +65,9 @@ const Home = () => {
 
   const handleFilterChange = (skill: string) => {
     setSelectedSkills((prev) =>
-      prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill],
+      prev.includes(skill.toLowerCase())
+        ? prev.filter((s) => s !== skill.toLowerCase())
+        : [...prev, skill.toLowerCase()],
     );
   };
 
@@ -81,7 +83,7 @@ const Home = () => {
     const matchesSkills =
       selectedSkills.length === 0 ||
       employee.skills.some((skill) =>
-        selectedSkills.includes(skill.name.toLowerCase()),
+        selectedSkills.includes(skill.category.toLowerCase()),
       );
 
     return matchesSearch && matchesSkills;

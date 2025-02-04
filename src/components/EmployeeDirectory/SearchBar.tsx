@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "../ui/input";
 import {
   Select,
@@ -9,6 +9,13 @@ import {
 } from "../ui/select";
 import { Badge } from "../ui/badge";
 import { Search, X } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+
+interface Technology {
+  id: number;
+  name: string;
+  specialty: string;
+}
 
 interface SearchBarProps {
   onSearch?: (query: string) => void;
@@ -22,15 +29,31 @@ const SearchBar = ({
   selectedSkills = [],
 }: SearchBarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [specialties, setSpecialties] = useState<string[]>([]);
 
-  const skillCategories = [
-    "Frontend",
-    "Backend",
-    "Design",
-    "DevOps",
-    "Mobile",
-    "AI/ML",
-  ];
+  useEffect(() => {
+    const fetchTechnologies = async () => {
+      const { data, error } = await supabase.rpc("get_technologies");
+
+      if (error) {
+        console.error("Error fetching technologies:", error);
+        return;
+      }
+
+      // Get unique specialties and filter out null/undefined values
+      const uniqueSpecialties = Array.from(
+        new Set(
+          data
+            .map((tech: Technology) => tech.specialty?.toLowerCase())
+            .filter(Boolean),
+        ),
+      ).sort();
+
+      setSpecialties(uniqueSpecialties);
+    };
+
+    fetchTechnologies();
+  }, []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
@@ -60,9 +83,9 @@ const SearchBar = ({
               <SelectValue placeholder="Filter by skill" />
             </SelectTrigger>
             <SelectContent>
-              {skillCategories.map((skill) => (
-                <SelectItem key={skill} value={skill.toLowerCase()}>
-                  {skill}
+              {specialties.map((specialty) => (
+                <SelectItem key={specialty} value={specialty}>
+                  {specialty.charAt(0).toUpperCase() + specialty.slice(1)}
                 </SelectItem>
               ))}
             </SelectContent>
