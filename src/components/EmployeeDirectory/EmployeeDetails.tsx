@@ -15,8 +15,14 @@ import {
   ArcElement,
 } from "chart.js";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "../ui/tooltip";
+import { Info as InfoIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { Project, Skill } from "./types";
 
 ChartJS.register(
   RadialLinearScale,
@@ -28,11 +34,27 @@ ChartJS.register(
   Legend,
 );
 
+interface Skill {
+  technology_id: number;
+  technology_name: string;
+  specialty_name: string;
+  years_of_experience: number;
+  skill_level: number;
+}
+
+interface CategoryOfImprovement {
+  category_id: number;
+  category_name: string;
+  category_description: string;
+  points: number;
+}
+
 const EmployeeDetails = () => {
   const { id } = useParams();
   const [employee, setEmployee] = useState<any>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
+
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [improvements, setImprovements] = useState<CategoryOfImprovement[]>([]);
   const [allTechnologies, setAllTechnologies] = useState<
     { id: number; name: string; specialty: string }[]
   >([]);
@@ -83,44 +105,8 @@ const EmployeeDetails = () => {
         image_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${employee.employee_name}`,
       });
 
-      setSkills(
-        employee.technology_details.map((tech: any) => ({
-          name: tech.technology_name,
-          category: tech.specialty_name?.toLowerCase() || "frontend",
-          proficiency: tech.skill_level,
-        })),
-      );
-
-      // Add mock projects since they're not in the database yet
-      setProjects([
-        {
-          id: "1",
-          name: "Employee Directory Revamp",
-          description:
-            "Led the redesign and implementation of the company-wide employee directory system",
-          role: "Tech Lead",
-          startDate: "2023-01-01",
-          endDate: "2023-06-30",
-        },
-        {
-          id: "2",
-          name: "Client Portal Migration",
-          description:
-            "Migrated legacy client portal to a modern React-based architecture",
-          role: "Senior Developer",
-          startDate: "2022-07-01",
-          endDate: "2022-12-31",
-        },
-        {
-          id: "3",
-          name: "API Gateway Implementation",
-          description:
-            "Designing and implementing a new API gateway for microservices architecture",
-          role: "Backend Developer",
-          startDate: "2023-07-01",
-          endDate: null,
-        },
-      ]);
+      setSkills(employee.technology_details);
+      setImprovements(employee.category_of_improvements);
     } catch (error) {
       console.error("Error fetching employee data:", error);
     } finally {
@@ -136,37 +122,67 @@ const EmployeeDetails = () => {
     );
   }
 
+  // Group skills by specialty
+  const specialtyGroups = skills.reduce(
+    (acc, skill) => {
+      const specialty = skill.specialty_name || "Other";
+      if (!acc[specialty]) {
+        acc[specialty] = [];
+      }
+      acc[specialty].push(skill);
+      return acc;
+    },
+    {} as Record<string, Skill[]>,
+  );
+
+  const specialtyColors: Record<string, { main: string; background: string }> =
+    {
+      Frontend: {
+        main: "rgba(99, 102, 241, 1)",
+        background: "rgba(99, 102, 241, 0.2)",
+      },
+      Backend: {
+        main: "rgba(16, 185, 129, 1)",
+        background: "rgba(16, 185, 129, 0.2)",
+      },
+      DevOps: {
+        main: "rgba(245, 158, 11, 1)",
+        background: "rgba(245, 158, 11, 0.2)",
+      },
+      Mobile: {
+        main: "rgba(236, 72, 153, 1)",
+        background: "rgba(236, 72, 153, 0.2)",
+      },
+      Other: {
+        main: "rgba(107, 114, 128, 1)",
+        background: "rgba(107, 114, 128, 0.2)",
+      },
+    };
+
   const radarData = {
     labels: allTechnologies.map((tech) => tech.name),
-    datasets: [
-      {
-        label: "Skill Proficiency",
-        data: allTechnologies.map((tech) => {
-          const skill = skills.find(
-            (s) => s.name.toLowerCase() === tech.name.toLowerCase(),
-          );
-          return skill ? skill.proficiency : 0;
-        }),
-        backgroundColor: "rgba(99, 102, 241, 0.2)",
-        borderColor: "rgba(99, 102, 241, 1)",
-        borderWidth: 2,
-        pointBackgroundColor: allTechnologies.map((tech) => {
-          const hasSkill = skills.some(
-            (s) => s.name.toLowerCase() === tech.name.toLowerCase(),
-          );
-          return hasSkill ? "rgba(99, 102, 241, 1)" : "rgba(203, 213, 225, 1)";
-        }),
-        pointBorderColor: "#fff",
-        pointHoverBackgroundColor: "#fff",
-        pointHoverBorderColor: "rgba(99, 102, 241, 1)",
-        pointRadius: allTechnologies.map((tech) => {
-          const hasSkill = skills.some(
-            (s) => s.name.toLowerCase() === tech.name.toLowerCase(),
-          );
-          return hasSkill ? 4 : 2;
-        }),
-      },
-    ],
+    datasets: Object.entries(specialtyGroups).map(([specialty, skills]) => ({
+      label: specialty,
+      data: allTechnologies.map((tech) => {
+        const skill = skills.find(
+          (s) => s.technology_name.toLowerCase() === tech.name.toLowerCase(),
+        );
+        return skill ? skill.skill_level : 0;
+      }),
+      backgroundColor:
+        specialtyColors[specialty]?.background ||
+        specialtyColors["Other"].background,
+      borderColor:
+        specialtyColors[specialty]?.main || specialtyColors["Other"].main,
+      borderWidth: 2,
+      pointBackgroundColor:
+        specialtyColors[specialty]?.main || specialtyColors["Other"].main,
+      pointBorderColor: "#fff",
+      pointHoverBackgroundColor: "#fff",
+      pointHoverBorderColor:
+        specialtyColors[specialty]?.main || specialtyColors["Other"].main,
+      pointRadius: 4,
+    })),
   };
 
   const radarOptions = {
@@ -194,9 +210,10 @@ const EmployeeDetails = () => {
           callback: (label: string, index: number) => {
             const tech = allTechnologies[index];
             const skill = skills.find(
-              (s) => s.name.toLowerCase() === tech.name.toLowerCase(),
+              (s) =>
+                s.technology_name.toLowerCase() === tech.name.toLowerCase(),
             );
-            const level = skill ? skill.proficiency : 0;
+            const level = skill ? skill.skill_level : 0;
             return `${label} (${level})`;
           },
         },
@@ -204,7 +221,8 @@ const EmployeeDetails = () => {
     },
     plugins: {
       legend: {
-        display: false,
+        display: true,
+        position: "top" as const,
       },
     },
   };
@@ -238,134 +256,143 @@ const EmployeeDetails = () => {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Skills & Radar Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Skills & Expertise</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-6">
-                <div className="flex flex-wrap gap-2">
-                  {skills.map((skill, index) => (
-                    <Badge key={index} variant="secondary">
-                      {skill.name} - Level {skill.proficiency}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              <Tabs defaultValue="radar" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="radar">Radar</TabsTrigger>
-                  <TabsTrigger value="polar">Polar Area</TabsTrigger>
-                </TabsList>
-                <TabsContent value="radar" className="h-[300px]">
-                  <Radar data={radarData} options={radarOptions} />
-                </TabsContent>
-
-                <TabsContent value="polar" className="h-[300px]">
-                  <PolarArea
-                    data={{
-                      labels: skills.map((skill) => skill.name),
-                      datasets: [
-                        {
-                          data: skills.map((skill) => skill.proficiency),
-                          backgroundColor: [
-                            "rgba(99, 102, 241, 0.7)",
-                            "rgba(129, 140, 248, 0.7)",
-                            "rgba(165, 180, 252, 0.7)",
-                            "rgba(199, 210, 254, 0.7)",
-                            "rgba(224, 231, 255, 0.7)",
-                          ],
-                          borderWidth: 1,
-                        },
-                      ],
-                    }}
-                    options={{
-                      maintainAspectRatio: false,
-                      scales: {
-                        r: {
-                          max: 10,
-                          ticks: {
-                            display: false,
+        <Card>
+          <CardHeader>
+            <CardTitle>Skills & Expertise</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <Tabs defaultValue="radar" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="radar">Radar</TabsTrigger>
+                    <TabsTrigger value="polar">Polar Area</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="radar" className="h-[400px]">
+                    <Radar data={radarData} options={radarOptions} />
+                  </TabsContent>
+                  <TabsContent value="polar" className="h-[400px]">
+                    <PolarArea
+                      data={{
+                        labels: Object.keys(specialtyGroups),
+                        datasets: [
+                          {
+                            data: Object.entries(specialtyGroups).map(
+                              ([specialty, skills]) =>
+                                skills.reduce(
+                                  (sum, skill) => sum + skill.skill_level,
+                                  0,
+                                ) / skills.length,
+                            ),
+                            backgroundColor: Object.keys(specialtyGroups).map(
+                              (specialty) =>
+                                specialtyColors[specialty]?.background ||
+                                specialtyColors["Other"].background,
+                            ),
+                            borderColor: Object.keys(specialtyGroups).map(
+                              (specialty) =>
+                                specialtyColors[specialty]?.main ||
+                                specialtyColors["Other"].main,
+                            ),
+                            borderWidth: 1,
                           },
-                          pointLabels: {
-                            callback: (label: string) => {
-                              const skill = skills.find(
-                                (s) => s.name === label,
-                              );
-                              return `${label} (${skill?.proficiency})`;
+                        ],
+                      }}
+                      options={{
+                        maintainAspectRatio: false,
+                        scales: {
+                          r: {
+                            max: 10,
+                            ticks: {
+                              display: false,
+                            },
+                            pointLabels: {
+                              callback: (label: string) => {
+                                const skills = specialtyGroups[label] || [];
+                                const avg =
+                                  skills.reduce(
+                                    (sum, skill) => sum + skill.skill_level,
+                                    0,
+                                  ) / skills.length;
+                                return `${label} (${avg.toFixed(1)})`;
+                              },
                             },
                           },
                         },
-                      },
-                      plugins: {
-                        legend: {
-                          position: "right",
+                        plugins: {
+                          legend: {
+                            position: "right",
+                          },
                         },
-                      },
-                    }}
-                  />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
+                      }}
+                    />
+                  </TabsContent>
+                </Tabs>
+              </div>
 
-          {/* Projects */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Projects</CardTitle>
-            </CardHeader>
-            <CardContent>
               <div className="space-y-4">
-                {projects.length > 0 ? (
-                  projects.map((project) => (
-                    <Card
-                      key={project.id}
-                      className="hover:shadow-md transition-shadow duration-200"
-                    >
-                      <CardContent className="p-4">
-                        <h3 className="font-semibold text-lg text-primary">
-                          {project.name}
-                        </h3>
-                        <div className="flex items-center text-sm text-muted-foreground mb-2">
-                          <span className="font-medium">{project.role}</span>
-                          <span className="mx-2">•</span>
-                          <span>
-                            {new Date(project.startDate).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "short",
-                                year: "numeric",
-                              },
-                            )}{" "}
-                            -{" "}
-                            {project.endDate
-                              ? new Date(project.endDate).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    month: "short",
-                                    year: "numeric",
-                                  },
-                                )
-                              : "Present"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          {project.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No projects available
+                {Object.entries(specialtyGroups).map(([specialty, skills]) => (
+                  <div key={specialty} className="space-y-2">
+                    <h4 className="font-semibold text-sm text-muted-foreground">
+                      {specialty}
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {skills.map((skill, index) => (
+                        <Badge
+                          key={index}
+                          variant="secondary"
+                          style={{
+                            backgroundColor:
+                              specialtyColors[specialty]?.background ||
+                              specialtyColors["Other"].background,
+                            color:
+                              specialtyColors[specialty]?.main ||
+                              specialtyColors["Other"].main,
+                            borderColor:
+                              specialtyColors[specialty]?.main ||
+                              specialtyColors["Other"].main,
+                          }}
+                        >
+                          {skill.technology_name} - Level {skill.skill_level}
+                          {skill.years_of_experience > 0 &&
+                            ` (${skill.years_of_experience}y exp)`}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {improvements.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-semibold text-sm text-muted-foreground mb-2">
+                      Areas for Improvement
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {improvements.map((improvement, index) => (
+                        <TooltipProvider key={index}>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <Badge
+                                variant="outline"
+                                className="border-dashed cursor-help"
+                              >
+                                {improvement.category_name} (
+                                {improvement.points} points)
+                                <InfoIcon className="w-4 h-4 ml-1" />
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{improvement.category_description}</p>
+                            </TooltipContent>
+                          </UITooltip>
+                        </TooltipProvider>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
